@@ -1,5 +1,7 @@
 # BusBahnBim for Omarchy
 
+> **Note:** This plugin is entirely AI-generated and was built for one specific use case: my own commute in Graz. It has had very little polish. Use it as it is, or as a starting point.
+
 An Omarchy shell bar widget for public transport in Styria (Verbundlinie / BusBahnBim).
 
 - **Bar:** shows the next departure from your stop, e.g. `󰔬 7 Wetzelsdorf 3′ +1`. A red `+N` means N minutes of delay.
