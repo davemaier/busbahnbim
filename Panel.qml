@@ -211,8 +211,8 @@ Panel {
   readonly property string pillLine: next && !vertical ? next.line : ""
   readonly property string pillDirection: next && !vertical && setting("showDirection", true)
     ? Hafas.shorten(next.direction, 16) : ""
-  readonly property string pillTime: next ? Hafas.countdown(next.time, nowMs) : (error ? "!" : "…")
-  readonly property string pillDelay: next && next.delay > 0 && !vertical ? "+" + next.delay : ""
+  // Actual (live) departure time; the delay is already included.
+  readonly property string pillTime: next ? Hafas.hhmm(next.time) : (error ? "!" : "…")
 
   component Pill: Row {
     property color textColor: root.foreground
@@ -253,15 +253,6 @@ Panel {
       font.pixelSize: Style.font.body
       anchors.verticalCenter: parent.verticalCenter
     }
-    Text {
-      textFormat: Text.PlainText
-      visible: text !== ""
-      text: root.pillDelay
-      color: root.urgent
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      anchors.verticalCenter: parent.verticalCenter
-    }
   }
 
   // Off-screen copy, only used to size the bar button.
@@ -294,7 +285,7 @@ Panel {
     if (root.error) return root.station.name + "\n" + root.error
     var lines = [root.station.name]
     root.barDepartures.slice(0, 4).forEach(function(d) {
-      lines.push(d.line + " " + d.direction + "  " + Hafas.hhmm(d.time) + (d.delay > 0 ? " (+" + d.delay + ")" : ""))
+      lines.push(d.line + " " + d.direction + "  " + Hafas.hhmm(d.time))
     })
     return lines.join("\n")
   }

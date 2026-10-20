@@ -4,7 +4,7 @@
 
 An Omarchy shell bar widget for public transport in Styria (Verbundlinie / BusBahnBim).
 
-- **Bar:** shows the next departure from your stop, e.g. `󰔬 7 Wetzelsdorf 3′ +1`. A red `+N` means N minutes of delay.
+- **Bar:** shows the next departure from your stop with its actual (live) departure time, e.g. `󰔬 7 Wetzelsdorf 12:07`.
 - **Popup, Departures tab:** the full live departure board. You can switch to another stop here, and click line chips to pick which lines the bar shows for that stop.
 - **Popup, Connections tab:** connection search from A to B, with legs, transfers and live delays.
 
