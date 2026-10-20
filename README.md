@@ -56,6 +56,13 @@ These go on the widget's entry in `~/.config/omarchy/shell.json`:
 
 The stop, the favorites and the per-stop lines picked in the popup are saved in `~/.local/state/busbahnbim.json`. The saved stop takes priority over `stationId`. To go back to the default, delete that file and run `omarchy restart shell`.
 
+## Refresh
+
+- Departures are fetched every `refreshIntervalSec` (60 s by default). The rate goes up to every 20 s while the popup is open or the next bus leaves within 5 minutes.
+- Opening the popup, switching stops and waking from sleep each trigger an immediate fetch.
+- A request that gets no answer within 8 s counts as failed. Failures are retried after 5 s, then 15 s, then 45 s, up to the normal interval. The last good data stays on screen, and the bar dims once it is more than 3 minutes old.
+- Connection results re-run every minute while the Connections tab is open. This stops once you load later connections.
+
 ## Files
 
 - `Panel.qml`: the bar pill and the popup

@@ -138,35 +138,89 @@ Panel {
     selectedLines.length ? selectedLines.join(",") : setting("lines", ""), setting("direction", ""))
   readonly property var next: barDepartures.length ? barDepartures[0] : null
 
-  function refresh() {
+  property int failures: 0
+
+  // Data older than three minutes is shown dimmed in the bar.
+  readonly property bool stale: updatedMs > 0 && nowMs - updatedMs > 180000
+
+  // Several triggers can fire at once (startup, settings, state file), so
+  // refresh() only schedules one fetch a moment later.
+  function refresh() { refreshDebounce.restart() }
+
+  Timer {
+    id: refreshDebounce
+    interval: 150
+    onTriggered: root.fetchNow()
+  }
+
+  // Requests are never aborted (aborting made Qt hang every later request);
+  // an outdated or timed-out response is simply ignored via requestId.
+  function fetchNow() {
     var id = ++root.requestId
     root.loading = true
+    requestTimeout.restart()
     Hafas.fetchDepartures(root.station, 60, function(err, list) {
-      if (id !== root.requestId) return
-      root.loading = false
-      root.error = err || ""
-      if (!err) {
-        root.departures = list
-        root.updatedMs = Date.now()
-      }
-      root.nowMs = Date.now()
+      if (id === root.requestId) root.finishRefresh(err, list)
     })
   }
 
+  function finishRefresh(err, list) {
+    requestTimeout.stop()
+    root.loading = false
+    root.error = err || ""
+    root.failures = err ? root.failures + 1 : 0
+    if (!err) {
+      root.departures = list
+      root.updatedMs = Date.now()
+    }
+    root.nowMs = Date.now()
+    refreshTimer.interval = root.nextRefreshMs()
+    refreshTimer.restart()
+  }
+
+  // How long to wait before the next fetch:
+  // - after errors, retry soon (5 s, 15 s, 45 s, ...) up to the normal interval
+  // - every 20 s while the popup is open or the next bus leaves within 5 minutes
+  // - otherwise the configured interval
+  function nextRefreshMs() {
+    var normal = Math.max(30, Number(root.setting("refreshIntervalSec", 60))) * 1000
+    if (root.failures > 0) return Math.min(normal, 5000 * Math.pow(3, root.failures - 1))
+    var soon = root.next && root.next.time.getTime() - Date.now() < 5 * 60000
+    if (root.opened || soon) return Math.min(normal, 20000)
+    return normal
+  }
+
   Timer {
-    interval: Math.max(30, Number(root.setting("refreshIntervalSec", 60))) * 1000
-    running: true
-    repeat: true
-    triggeredOnStart: true
+    id: refreshTimer
+    interval: 60000
     onTriggered: root.refresh()
   }
 
-  // Recount the minutes between fetches.
+  // Give up on a request that hangs (answers normally take < 1 s), so the
+  // retry schedule keeps running.
+  Timer {
+    id: requestTimeout
+    interval: 8000
+    onTriggered: {
+      root.requestId++
+      root.finishRefresh("Request timed out", [])
+    }
+  }
+
+  Component.onCompleted: root.refresh()
+
+  // Recount the minutes between fetches. A big jump in the clock means the
+  // machine was asleep, so fetch right away instead of showing old data.
   Timer {
     interval: root.opened ? 1000 : 10000
     running: true
     repeat: true
-    onTriggered: root.nowMs = Date.now()
+    onTriggered: {
+      var now = Date.now()
+      var slept = now - root.nowMs > 120000
+      root.nowMs = now
+      if (slept) root.refresh()
+    }
   }
 
   // ---- Popup state -----------------------------------------------------
@@ -200,24 +254,63 @@ Panel {
   property int expandedTrip: -1
   property int tripRequestId: 0
 
-  function searchTrips(later) {
-    var from = fromSearch.stop, to = toSearch.stop
-    if (!from || !to) { root.tripError = "Choose a start and a destination"; return }
-    var when = Hafas.parseTime(timeField.text)
+  property var tripQuery: null      // { from, to, time } of the shown results
+  property bool tripsPaged: false   // "Later connections" was used
+  property double tripsUpdatedMs: 0
+
+  // mode: "new" (Search button), "later" (append later trips) or
+  // "refresh" (quietly re-run the shown search for fresh delays).
+  function searchTrips(mode) {
+    var query = mode === "new"
+      ? { from: fromSearch.stop, to: toSearch.stop, time: timeField.text }
+      : root.tripQuery
+    if (!query || !query.from || !query.to) { root.tripError = "Choose a start and a destination"; return }
+    var when = Hafas.parseTime(query.time)
     if (!when) { root.tripError = "Enter the time as HH:MM"; return }
-    if (later && root.trips.length) when = new Date(root.trips[root.trips.length - 1].dep.getTime() + 60000)
+    if (mode === "later" && root.trips.length) when = new Date(root.trips[root.trips.length - 1].dep.getTime() + 60000)
 
     var id = ++root.tripRequestId
     root.tripLoading = true
-    root.tripError = ""
-    if (!later) { root.trips = []; root.expandedTrip = -1 }
-    keyCatcher.forceActiveFocus()
-    Hafas.fetchTrips(from, to, when, function(err, list) {
+    tripTimeout.restart()
+    if (mode === "new") {
+      root.tripQuery = query
+      root.tripsPaged = false
+      root.trips = []
+      root.expandedTrip = -1
+      root.tripError = ""
+      keyCatcher.forceActiveFocus()
+    }
+    Hafas.fetchTrips(query.from, query.to, when, function(err, list) {
       if (id !== root.tripRequestId) return
+      tripTimeout.stop()
       root.tripLoading = false
-      root.tripError = err || (list.length || later ? "" : "No connections found")
-      root.trips = later ? root.trips.concat(list) : list
+      // A failed background refresh keeps the old results on screen.
+      if (err && mode === "refresh") return
+      root.tripError = err || (list.length || mode === "later" ? "" : "No connections found")
+      if (err) return
+      if (mode === "later") { root.trips = root.trips.concat(list); root.tripsPaged = true }
+      else root.trips = list
+      root.tripsUpdatedMs = Date.now()
     })
+  }
+
+  Timer {
+    id: tripTimeout
+    interval: 8000
+    onTriggered: {
+      root.tripRequestId++
+      root.tripLoading = false
+      root.tripError = "Request timed out"
+    }
+  }
+
+  // Keep the shown connections current while the tab is open (skipped once
+  // later pages are loaded, so the list doesn't jump around).
+  Timer {
+    interval: 60000
+    repeat: true
+    running: root.opened && root.tab === "trip" && root.tripQuery !== null && !root.tripsPaged
+    onTriggered: if (!root.tripLoading) root.searchTrips("refresh")
   }
 
   function swapStops() {
@@ -306,6 +399,7 @@ Panel {
         Pill {
           anchors.centerIn: parent
           textColor: button.foreground
+          opacity: root.stale ? 0.5 : 1
         }
       }
     }
@@ -317,12 +411,17 @@ Panel {
   }
 
   function tooltip() {
-    if (root.error) return root.station.name + "\n" + root.error
     var lines = [root.station.name]
     root.barDepartures.slice(0, 4).forEach(function(d) {
       lines.push(d.line + " " + d.direction + "  " + Hafas.hhmm(d.time))
     })
+    if (root.error) lines.push(root.error)
+    lines.push(root.updatedText())
     return lines.join("\n")
+  }
+
+  function updatedText() {
+    return root.updatedMs ? "Updated " + Hafas.hhmm(new Date(root.updatedMs)) : "Not loaded yet"
   }
 
   // ---- Popup -----------------------------------------------------------
@@ -342,7 +441,7 @@ Panel {
       blocked: root.typing
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onReturnRequested: root.tab === "dep" ? root.startEditingStation() : root.searchTrips(false)
+      onReturnRequested: root.tab === "dep" ? root.startEditingStation() : root.searchTrips("new")
       onTextKey: function(t) {
         if (t === "r" || t === "R") root.refresh()
         else if (t === "s" || t === "S") root.startEditingStation()
@@ -369,8 +468,8 @@ Panel {
           PanelHero {
             width: parent.width
             title: root.station.name
-            meta: root.error ? root.error
-              : root.updatedMs ? "Updated " + Hafas.hhmm(new Date(root.updatedMs)) : "Loading…"
+            meta: root.error ? root.error + " · " + root.updatedText()
+              : root.updatedMs ? root.updatedText() : "Loading…"
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
@@ -597,7 +696,7 @@ Panel {
                   preferPrefix: root.homeCity
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  onPicked: toSearch.stop ? root.searchTrips(false) : toSearch.focusField()
+                  onPicked: toSearch.stop ? root.searchTrips("new") : toSearch.focusField()
                   onCancelled: keyCatcher.forceActiveFocus()
                 }
 
@@ -609,7 +708,7 @@ Panel {
                   preferPrefix: root.homeCity
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  onPicked: fromSearch.stop ? root.searchTrips(false) : fromSearch.focusField()
+                  onPicked: fromSearch.stop ? root.searchTrips("new") : fromSearch.focusField()
                   onCancelled: keyCatcher.forceActiveFocus()
                 }
               }
@@ -635,7 +734,7 @@ Panel {
                 foreground: root.foreground
                 font.family: root.fontFamily
                 Keys.onPressed: function(event) {
-                  if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { root.searchTrips(false); event.accepted = true }
+                  if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { root.searchTrips("new"); event.accepted = true }
                   else if (event.key === Qt.Key_Escape) { keyCatcher.forceActiveFocus(); event.accepted = true }
                 }
               }
@@ -645,7 +744,7 @@ Panel {
                 bordered: true
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onClicked: root.searchTrips(false)
+                onClicked: root.searchTrips("new")
               }
             }
 
@@ -658,6 +757,16 @@ Panel {
               color: root.urgent
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
+            }
+
+            Text {
+              visible: root.trips.length > 0
+              textFormat: Text.PlainText
+              text: "Updated " + Hafas.hhmm(new Date(root.tripsUpdatedMs))
+                + (root.tripsPaged ? "" : " · refreshes every minute")
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
             }
 
             Repeater {
@@ -801,7 +910,7 @@ Panel {
               text: "Later connections"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              onClicked: root.searchTrips(true)
+              onClicked: root.searchTrips("later")
             }
           }
         }
