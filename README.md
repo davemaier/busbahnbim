@@ -5,6 +5,7 @@
 An Omarchy shell bar widget for public transport in Styria (Verbundlinie / BusBahnBim).
 
 - **Bar:** shows the next departure from your stop with its actual (live) departure time, e.g. `󰔬 7 12:07`.
+- **Favorites:** star a stop in the popup header to make it a favorite. Favorites appear as chips at the top of the popup; click one (or press 1–9) to switch to it. Right-click the bar to cycle through them.
 - **Popup, Departures tab:** the full live departure board. You can switch to another stop here, and click line chips to pick which lines the bar shows for that stop.
 - **Popup, Connections tab:** connection search from A to B, with legs, transfers and live delays.
 
@@ -28,14 +29,17 @@ To move the widget: `omarchy bar move david.busbahnbim --section center`
 |---|---|
 | Left click | open / close popup |
 | Middle click | refresh |
+| Right click | next favorite stop |
 | `s` / Enter (Departures) | change stop |
+| `f` | add / remove current stop as favorite |
+| `1`–`9` | switch to favorite |
 | `d` / `c` | switch tab |
 | `r` | refresh |
 | Up/Down, Enter, Esc | pick a stop suggestion |
 
 The time field takes `now` (the default) or a time like `7:45`.
 
-IPC: `omarchy-shell david.busbahnbim toggle|refresh|search|toggleLine <line>`.
+IPC: `omarchy-shell david.busbahnbim toggle|refresh|search|toggleLine <line>|toggleFavorite|nextFavorite`.
 For example, to bind connection search to a key, run `omarchy-shell david.busbahnbim search`.
 
 ## Settings
@@ -50,7 +54,7 @@ These go on the widget's entry in `~/.config/omarchy/shell.json`:
 | `showDirection` | `false` | show the destination in the bar |
 | `refreshIntervalSec` | `60` | how often departures are fetched |
 
-The stop and the per-stop lines picked in the popup are saved in `~/.local/state/busbahnbim.json`. The saved stop takes priority over `stationId`. To go back to the default, delete that file and run `omarchy restart shell`.
+The stop, the favorites and the per-stop lines picked in the popup are saved in `~/.local/state/busbahnbim.json`. The saved stop takes priority over `stationId`. To go back to the default, delete that file and run `omarchy restart shell`.
 
 ## Files
 

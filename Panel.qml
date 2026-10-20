@@ -25,6 +25,8 @@ Panel {
   // stop id to the lines the bar should show for that stop.
   property var stationOverride: null
   property var barLines: ({})
+  // Favourite stops ({ extId, name }), switchable from the popup and by right click.
+  property var favorites: []
   readonly property var station: stationOverride || {
     extId: String(setting("stationId", "460428100")),
     name: String(setting("stationName", "Graz Uni/Beethovenstraße"))
@@ -40,6 +42,7 @@ Panel {
         var s = JSON.parse(text())
         if (s && s.extId) root.stationOverride = { extId: String(s.extId), name: String(s.name || s.extId) }
         if (s && s.barLines) root.barLines = s.barLines
+        if (s && s.favorites) root.favorites = s.favorites
       } catch (e) {}
     }
   }
@@ -53,9 +56,38 @@ Panel {
   }
 
   function saveState() {
-    var state = { barLines: root.barLines }
+    var state = { barLines: root.barLines, favorites: root.favorites }
     if (root.stationOverride) { state.extId = root.stationOverride.extId; state.name = root.stationOverride.name }
     stateFile.setText(JSON.stringify(state))
+  }
+
+  readonly property bool isFavorite: favorites.some(function(f) { return f.extId === station.extId })
+
+  function toggleFavorite() {
+    var id = root.station.extId
+    root.favorites = root.isFavorite
+      ? root.favorites.filter(function(f) { return f.extId !== id })
+      : root.favorites.concat([{ extId: id, name: root.station.name }])
+    root.saveState()
+  }
+
+  function selectFavorite(index) {
+    var fav = root.favorites[index]
+    if (fav) root.chooseStation(fav)
+  }
+
+  // Next favourite after the current stop (or the first one).
+  function nextFavorite() {
+    if (!root.favorites.length) return
+    var id = root.station.extId
+    var i = root.favorites.findIndex(function(f) { return f.extId === id })
+    root.selectFavorite((i + 1) % root.favorites.length)
+  }
+
+  // "Graz Jakominiplatz" -> "Jakominiplatz" when the city matches the current stop's.
+  function shortStopName(name) {
+    var prefix = root.homeCity + " "
+    return name.indexOf(prefix) === 0 && name.length > prefix.length ? name.slice(prefix.length) : name
   }
 
   // Lines picked in the popup for this stop; empty means the `lines` setting applies.
@@ -204,6 +236,8 @@ Panel {
     function refresh(): void { root.refresh() }
     function search(): void { root.open(); root.showTripTab() }
     function toggleLine(line: string): void { root.toggleLine(line) }
+    function toggleFavorite(): void { root.toggleFavorite() }
+    function nextFavorite(): void { root.nextFavorite() }
   }
 
   // ---- Bar pill --------------------------------------------------------
@@ -277,6 +311,7 @@ Panel {
     }
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh()
+      else if (b === Qt.RightButton) root.nextFavorite()
       else root.opened ? root.close() : root.open()
     }
   }
@@ -311,8 +346,10 @@ Panel {
       onTextKey: function(t) {
         if (t === "r" || t === "R") root.refresh()
         else if (t === "s" || t === "S") root.startEditingStation()
-        else if (t === "d" || t === "D" || t === "1") root.tab = "dep"
-        else if (t === "c" || t === "C" || t === "2") root.showTripTab()
+        else if (t === "f" || t === "F") root.toggleFavorite()
+        else if (t === "d" || t === "D") root.tab = "dep"
+        else if (t === "c" || t === "C") root.showTripTab()
+        else if (t >= "1" && t <= "9") root.selectFavorite(Number(t) - 1)
       }
 
       Flickable {
@@ -349,6 +386,13 @@ Panel {
               Row {
                 spacing: Style.space(6)
                 PanelActionButton {
+                  iconText: root.isFavorite ? "\u{F04CE}" : "\u{F04D2}"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  tooltipText: root.isFavorite ? "Remove from favorites (f)" : "Add to favorites (f)"
+                  onClicked: root.toggleFavorite()
+                }
+                PanelActionButton {
                   iconText: "\u{F0349}"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
@@ -362,6 +406,29 @@ Panel {
                   tooltipText: "Refresh (r)"
                   onClicked: root.refresh()
                 }
+              }
+            }
+          }
+
+          // Favourite stops: click (or press 1-9) to switch.
+          Flow {
+            visible: root.favorites.length > 0
+            width: parent.width
+            spacing: Style.space(4)
+
+            Repeater {
+              model: root.favorites
+
+              delegate: Button {
+                required property var modelData
+                required property int index
+                text: (index < 9 ? (index + 1) + "  " : "") + root.shortStopName(modelData.name)
+                selected: modelData.extId === root.station.extId
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.selectFavorite(index)
               }
             }
           }
