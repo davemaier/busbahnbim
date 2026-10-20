@@ -209,7 +209,7 @@ Panel {
   // ---- Bar pill --------------------------------------------------------
   readonly property string pillIcon: Hafas.ICONS[next ? next.kind : "tram"]
   readonly property string pillLine: next && !vertical ? next.line : ""
-  readonly property string pillDirection: next && !vertical && setting("showDirection", true)
+  readonly property string pillDirection: next && !vertical && setting("showDirection", false)
     ? Hafas.shorten(next.direction, 16) : ""
   // Actual (live) departure time; the delay is already included.
   readonly property string pillTime: next ? Hafas.hhmm(next.time) : (error ? "!" : "…")

@@ -22,7 +22,7 @@
       "stationName": "Graz Uni/Beethovenstraße",
       "lines": "",
       "direction": "",
-      "showDirection": true,
+      "showDirection": false,
       "refreshIntervalSec": 60
     },
     "schema": [
@@ -30,7 +30,7 @@
       { "key": "stationName", "type": "string", "label": "Default stop name", "defaultValue": "Graz Uni/Beethovenstraße" },
       { "key": "lines", "type": "string", "label": "Lines in the bar", "defaultValue": "", "description": "Comma-separated, e.g. 1, 7, 63. Empty shows every line." },
       { "key": "direction", "type": "string", "label": "Direction filter", "defaultValue": "", "description": "Only show departures whose destination contains this text. Empty shows all." },
-      { "key": "showDirection", "type": "boolean", "label": "Show destination in the bar", "defaultValue": true },
+      { "key": "showDirection", "type": "boolean", "label": "Show destination in the bar", "defaultValue": false },
       { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 30, "max": 600, "step": 15, "defaultValue": 60 }
     ]
   }

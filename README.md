@@ -4,7 +4,7 @@
 
 An Omarchy shell bar widget for public transport in Styria (Verbundlinie / BusBahnBim).
 
-- **Bar:** shows the next departure from your stop with its actual (live) departure time, e.g. `󰔬 7 Wetzelsdorf 12:07`.
+- **Bar:** shows the next departure from your stop with its actual (live) departure time, e.g. `󰔬 7 12:07`.
 - **Popup, Departures tab:** the full live departure board. You can switch to another stop here, and click line chips to pick which lines the bar shows for that stop.
 - **Popup, Connections tab:** connection search from A to B, with legs, transfers and live delays.
 
@@ -47,7 +47,7 @@ These go on the widget's entry in `~/.config/omarchy/shell.json`:
 | `stationId` / `stationName` | `460428100` / Graz Uni/Beethovenstraße | default stop |
 | `lines` | `""` | lines shown in the bar, e.g. `"1, 7"`; used only for stops with no lines picked in the popup |
 | `direction` | `""` | bar only shows destinations containing this text |
-| `showDirection` | `true` | show the destination in the bar |
+| `showDirection` | `false` | show the destination in the bar |
 | `refreshIntervalSec` | `60` | how often departures are fetched |
 
 The stop and the per-stop lines picked in the popup are saved in `~/.local/state/busbahnbim.json`. The saved stop takes priority over `stationId`. To go back to the default, delete that file and run `omarchy restart shell`.
