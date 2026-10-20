@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "david.busbahnbim",
+  "name": "BusBahnBim",
+  "version": "0.1.0",
+  "author": "David Maier",
+  "description": "Next departures from a Styrian public transport stop (Verbundlinie / BusBahnBim) in the bar, with a departure board and connection search in the popup.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "BusBahnBim",
+    "description": "Next departure from your stop; click for the departure board and connection search",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "stationId": "460428100",
+      "stationName": "Graz Uni/Beethovenstraße",
+      "lines": "",
+      "direction": "",
+      "showDirection": true,
+      "refreshIntervalSec": 60
+    },
+    "schema": [
+      { "key": "stationId", "type": "string", "label": "Default stop id", "defaultValue": "460428100", "description": "HAFAS stop id. Changing the stop in the popup overrides this." },
+      { "key": "stationName", "type": "string", "label": "Default stop name", "defaultValue": "Graz Uni/Beethovenstraße" },
+      { "key": "lines", "type": "string", "label": "Lines in the bar", "defaultValue": "", "description": "Comma-separated, e.g. 1, 7, 63. Empty shows every line." },
+      { "key": "direction", "type": "string", "label": "Direction filter", "defaultValue": "", "description": "Only show departures whose destination contains this text. Empty shows all." },
+      { "key": "showDirection", "type": "boolean", "label": "Show destination in the bar", "defaultValue": true },
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 30, "max": 600, "step": 15, "defaultValue": 60 }
+    ]
+  }
+}
