@@ -8,7 +8,7 @@ var ENDPOINT = "https://verkehrsauskunft.verbundlinie.at/hamm/gate"
 
 var ENVELOPE = {
   ver: "1.59",
-  lang: "deu",
+  lang: "eng",
   auth: { type: "AID", aid: "wf7mcf9bv3nv8g5f" },
   client: { id: "VAO", type: "WEB", name: "webapp", l: "vs_webapp" },
   ext: "VAO.22",
@@ -31,12 +31,12 @@ function request(meth, req, cb) {
   var xhr = new XMLHttpRequest()
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== XMLHttpRequest.DONE) return
-    if (xhr.status !== 200) { cb(xhr.status ? "HTTP " + xhr.status : "Keine Verbindung", null); return }
+    if (xhr.status !== 200) { cb(xhr.status ? "HTTP " + xhr.status : "No connection", null); return }
     try {
       var data = JSON.parse(xhr.responseText)
       var svc = data.svcResL && data.svcResL[0]
       if (data.err && data.err !== "OK") cb(data.errTxt || data.err, null)
-      else if (!svc) cb("Leere Antwort", null)
+      else if (!svc) cb("Empty response", null)
       else if (svc.err !== "OK") cb(svc.errTxt || svc.err, null)
       else cb(null, svc.res)
     } catch (e) {
@@ -198,7 +198,7 @@ function minutesUntil(date, nowMs) {
 
 function countdown(date, nowMs) {
   var m = minutesUntil(date, nowMs)
-  if (m <= 0) return "jetzt"
+  if (m <= 0) return "now"
   if (m < 60) return m + "′"
   return hhmm(date)
 }
@@ -212,7 +212,7 @@ function duration(minutes) {
   return minutes < 60 ? minutes + " min" : Math.floor(minutes / 60) + " h " + pad(minutes % 60)
 }
 
-// "" / "jetzt" -> now; "7:45", "0745", "7.45" -> today at that time.
+// "" / "now" -> now; "7:45", "0745", "7.45" -> today at that time.
 function parseTime(text) {
   var s = String(text || "").trim().toLowerCase()
   var now = new Date()

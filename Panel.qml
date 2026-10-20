@@ -20,9 +20,11 @@ Panel {
   readonly property bool vertical: bar ? bar.vertical : false
 
   // ---- Stop selection --------------------------------------------------
-  // The popup's choice is kept in a small state file and wins over the
-  // default from the shell.json settings.
+  // The popup's choices are kept in a small state file: the chosen stop wins
+  // over the default from the shell.json settings, and `barLines` maps a
+  // stop id to the lines the bar should show for that stop.
   property var stationOverride: null
+  property var barLines: ({})
   readonly property var station: stationOverride || {
     extId: String(setting("stationId", "460428100")),
     name: String(setting("stationName", "Graz Uni/Beethovenstraße"))
@@ -37,6 +39,7 @@ Panel {
       try {
         var s = JSON.parse(text())
         if (s && s.extId) root.stationOverride = { extId: String(s.extId), name: String(s.name || s.extId) }
+        if (s && s.barLines) root.barLines = s.barLines
       } catch (e) {}
     }
   }
@@ -46,7 +49,46 @@ Panel {
     keyCatcher.forceActiveFocus()
     if (!stop.extId) return
     root.stationOverride = { extId: stop.extId, name: stop.name }
-    stateFile.setText(JSON.stringify(root.stationOverride))
+    root.saveState()
+  }
+
+  function saveState() {
+    var state = { barLines: root.barLines }
+    if (root.stationOverride) { state.extId = root.stationOverride.extId; state.name = root.stationOverride.name }
+    stateFile.setText(JSON.stringify(state))
+  }
+
+  // Lines picked in the popup for this stop; empty means the `lines` setting applies.
+  readonly property var selectedLines: barLines[station.extId] || []
+
+  function toggleLine(line) {
+    var lines = root.selectedLines.slice()
+    var i = lines.indexOf(line)
+    if (i >= 0) lines.splice(i, 1)
+    else lines.push(line)
+    var all = Object.assign({}, root.barLines)
+    if (lines.length) all[root.station.extId] = lines
+    else delete all[root.station.extId]
+    root.barLines = all
+    root.saveState()
+  }
+
+  // Every line seen at this stop (plus picked ones not running right now), as chips.
+  readonly property var lineChoices: {
+    var seen = {}, list = []
+    departures.forEach(function(d) {
+      if (!seen[d.line]) { seen[d.line] = true; list.push({ line: d.line, kind: d.kind }) }
+    })
+    selectedLines.forEach(function(l) {
+      if (!seen[l]) { seen[l] = true; list.push({ line: l, kind: "other" }) }
+    })
+    // Numbers first in numeric order (1, 7, 31, 200), then names like N1 or X30.
+    return list.sort(function(a, b) {
+      var na = parseInt(a.line, 10), nb = parseInt(b.line, 10)
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
+      if (isNaN(na) !== isNaN(nb)) return isNaN(na) ? 1 : -1
+      return a.line < b.line ? -1 : a.line > b.line ? 1 : 0
+    })
   }
 
   // ---- Departures ------------------------------------------------------
@@ -60,13 +102,14 @@ Panel {
   readonly property var upcoming: departures.filter(function(d) {
     return !d.cancelled && d.time.getTime() > nowMs - 30000
   })
-  readonly property var barDepartures: Hafas.filterDepartures(upcoming, setting("lines", ""), setting("direction", ""))
+  readonly property var barDepartures: Hafas.filterDepartures(upcoming,
+    selectedLines.length ? selectedLines.join(",") : setting("lines", ""), setting("direction", ""))
   readonly property var next: barDepartures.length ? barDepartures[0] : null
 
   function refresh() {
     var id = ++root.requestId
     root.loading = true
-    Hafas.fetchDepartures(root.station, 30, function(err, list) {
+    Hafas.fetchDepartures(root.station, 60, function(err, list) {
       if (id !== root.requestId) return
       root.loading = false
       root.error = err || ""
@@ -127,9 +170,9 @@ Panel {
 
   function searchTrips(later) {
     var from = fromSearch.stop, to = toSearch.stop
-    if (!from || !to) { root.tripError = "Start und Ziel wählen"; return }
+    if (!from || !to) { root.tripError = "Choose a start and a destination"; return }
     var when = Hafas.parseTime(timeField.text)
-    if (!when) { root.tripError = "Zeit als HH:MM eingeben"; return }
+    if (!when) { root.tripError = "Enter the time as HH:MM"; return }
     if (later && root.trips.length) when = new Date(root.trips[root.trips.length - 1].dep.getTime() + 60000)
 
     var id = ++root.tripRequestId
@@ -140,7 +183,7 @@ Panel {
     Hafas.fetchTrips(from, to, when, function(err, list) {
       if (id !== root.tripRequestId) return
       root.tripLoading = false
-      root.tripError = err || (list.length || later ? "" : "Keine Verbindungen gefunden")
+      root.tripError = err || (list.length || later ? "" : "No connections found")
       root.trips = later ? root.trips.concat(list) : list
     })
   }
@@ -160,6 +203,7 @@ Panel {
     function toggle(): void { root.opened ? root.close() : root.open() }
     function refresh(): void { root.refresh() }
     function search(): void { root.open(); root.showTripTab() }
+    function toggleLine(line: string): void { root.toggleLine(line) }
   }
 
   // ---- Bar pill --------------------------------------------------------
@@ -277,7 +321,7 @@ Panel {
         if (t === "r" || t === "R") root.refresh()
         else if (t === "s" || t === "S") root.startEditingStation()
         else if (t === "d" || t === "D" || t === "1") root.tab = "dep"
-        else if (t === "v" || t === "V" || t === "2") root.showTripTab()
+        else if (t === "c" || t === "C" || t === "2") root.showTripTab()
       }
 
       Flickable {
@@ -298,7 +342,7 @@ Panel {
             width: parent.width
             title: root.station.name
             meta: root.error ? root.error
-              : root.updatedMs ? "Aktualisiert " + Hafas.hhmm(new Date(root.updatedMs)) : "Lade…"
+              : root.updatedMs ? "Updated " + Hafas.hhmm(new Date(root.updatedMs)) : "Loading…"
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
@@ -317,14 +361,14 @@ Panel {
                   iconText: "\u{F0349}"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  tooltipText: "Haltestelle ändern (s)"
+                  tooltipText: "Change stop (s)"
                   onClicked: root.startEditingStation()
                 }
                 PanelActionButton {
                   iconText: "\u{F0450}"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  tooltipText: "Aktualisieren (r)"
+                  tooltipText: "Refresh (r)"
                   onClicked: root.refresh()
                 }
               }
@@ -332,7 +376,7 @@ Panel {
           }
 
           ButtonGroup {
-            options: [{ value: "dep", label: "Abfahrten" }, { value: "trip", label: "Verbindung" }]
+            options: [{ value: "dep", label: "Departures" }, { value: "trip", label: "Connections" }]
             value: root.tab
             focusable: false
             foreground: root.foreground
@@ -350,7 +394,7 @@ Panel {
               id: stationSearch
               visible: root.editingStation
               width: parent.width
-              placeholderText: "Haltestelle suchen"
+              placeholderText: "Search stop"
               preferPrefix: root.homeCity
               foreground: root.foreground
               fontFamily: root.fontFamily
@@ -359,9 +403,51 @@ Panel {
             }
 
             Text {
+              visible: root.lineChoices.length > 0
+              textFormat: Text.PlainText
+              text: root.selectedLines.length ? "Shown in the bar:" : "Shown in the bar: all lines (click to pick)"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Flow {
+              visible: root.lineChoices.length > 0
+              width: parent.width
+              spacing: Style.space(4)
+
+              Repeater {
+                model: root.lineChoices
+
+                delegate: LineBadge {
+                  required property var modelData
+                  readonly property bool picked: root.selectedLines.indexOf(modelData.line) >= 0
+                  line: modelData.line
+                  kind: modelData.kind
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  opacity: picked || root.selectedLines.length === 0 ? 1 : 0.45
+                  border.width: picked ? Math.max(1, Style.space(1)) : 0
+                  border.color: root.foreground
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleLine(modelData.line)
+                  }
+                }
+              }
+            }
+
+            PanelSeparator {
+              visible: root.lineChoices.length > 0
+              foreground: root.foreground
+            }
+
+            Text {
               visible: root.upcoming.length === 0
               textFormat: Text.PlainText
-              text: root.loading ? "Lade Abfahrten…" : (root.error ? "Fehler: " + root.error : "Keine Abfahrten")
+              text: root.loading ? "Loading departures…" : (root.error ? "Error: " + root.error : "No departures")
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -419,7 +505,7 @@ Panel {
                     width: Style.space(44)
                     horizontalAlignment: Text.AlignRight
                     textFormat: Text.PlainText
-                    text: modelData.cancelled ? "fällt aus" : Hafas.countdown(modelData.time, root.nowMs)
+                    text: modelData.cancelled ? "cancelled" : Hafas.countdown(modelData.time, root.nowMs)
                     color: modelData.cancelled ? root.urgent : root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -449,7 +535,7 @@ Panel {
                   id: fromSearch
                   width: parent.width
                   stationsOnly: false
-                  placeholderText: "Von"
+                  placeholderText: "From"
                   preferPrefix: root.homeCity
                   foreground: root.foreground
                   fontFamily: root.fontFamily
@@ -461,7 +547,7 @@ Panel {
                   id: toSearch
                   width: parent.width
                   stationsOnly: false
-                  placeholderText: "Nach"
+                  placeholderText: "To"
                   preferPrefix: root.homeCity
                   foreground: root.foreground
                   fontFamily: root.fontFamily
@@ -476,7 +562,7 @@ Panel {
                 iconText: "\u{F04E1}"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                tooltipText: "Start und Ziel tauschen"
+                tooltipText: "Swap start and destination"
                 onClicked: root.swapStops()
               }
             }
@@ -487,7 +573,7 @@ Panel {
               TextField {
                 id: timeField
                 width: Style.space(110)
-                placeholderText: "jetzt / HH:MM"
+                placeholderText: "now / HH:MM"
                 foreground: root.foreground
                 font.family: root.fontFamily
                 Keys.onPressed: function(event) {
@@ -497,7 +583,7 @@ Panel {
               }
 
               Button {
-                text: root.tripLoading ? "Suche…" : "Suchen"
+                text: root.tripLoading ? "Searching…" : "Search"
                 bordered: true
                 foreground: root.foreground
                 fontFamily: root.fontFamily
@@ -568,7 +654,7 @@ Panel {
                         anchors.baseline: tripTimes.baseline
                         textFormat: Text.PlainText
                         text: Hafas.duration(tripRow.modelData.minutes) + " · "
-                          + (tripRow.modelData.changes === 0 ? "direkt" : tripRow.modelData.changes + "× umst.")
+                          + (tripRow.modelData.changes === 0 ? "direct" : tripRow.modelData.changes + (tripRow.modelData.changes === 1 ? " change" : " changes"))
                         color: root.dim
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.body
@@ -622,7 +708,7 @@ Panel {
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                         text: Hafas.hhmm(modelData.dep) + "  " + modelData.from
-                          + (modelData.platform ? "  (Steig " + modelData.platform.trim() + ")" : "")
+                          + (modelData.platform ? "  (platform " + modelData.platform.trim() + ")" : "")
                         color: root.foreground
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.body
@@ -654,7 +740,7 @@ Panel {
 
             Button {
               visible: root.trips.length > 0
-              text: "Spätere Verbindungen"
+              text: "Later connections"
               foreground: root.foreground
               fontFamily: root.fontFamily
               onClicked: root.searchTrips(true)
