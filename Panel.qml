@@ -153,19 +153,27 @@ Panel {
     onTriggered: root.fetchNow()
   }
 
-  // Requests are never aborted (aborting made Qt hang every later request);
-  // an outdated or timed-out response is simply ignored via requestId.
+  // HTTP for Hafas.js: one curl process per request (see Request.qml), which
+  // always finishes within 8 s, so a hung connection can't block refreshing.
+  Component {
+    id: requestComponent
+    Request {}
+  }
+
+  function post(url, body, cb) {
+    requestComponent.createObject(root, { url: url, body: body, callback: cb })
+  }
+
+  // An outdated response (e.g. for the previous stop) is ignored via requestId.
   function fetchNow() {
     var id = ++root.requestId
     root.loading = true
-    requestTimeout.restart()
-    Hafas.fetchDepartures(root.station, 60, function(err, list) {
+    Hafas.fetchDepartures(root.post, root.station, 60, function(err, list) {
       if (id === root.requestId) root.finishRefresh(err, list)
     })
   }
 
   function finishRefresh(err, list) {
-    requestTimeout.stop()
     root.loading = false
     root.error = err || ""
     root.failures = err ? root.failures + 1 : 0
@@ -194,17 +202,6 @@ Panel {
     id: refreshTimer
     interval: 60000
     onTriggered: root.refresh()
-  }
-
-  // Give up on a request that hangs (answers normally take < 1 s), so the
-  // retry schedule keeps running.
-  Timer {
-    id: requestTimeout
-    interval: 8000
-    onTriggered: {
-      root.requestId++
-      root.finishRefresh("Request timed out", [])
-    }
   }
 
   Component.onCompleted: root.refresh()
@@ -271,7 +268,6 @@ Panel {
 
     var id = ++root.tripRequestId
     root.tripLoading = true
-    tripTimeout.restart()
     if (mode === "new") {
       root.tripQuery = query
       root.tripsPaged = false
@@ -280,9 +276,8 @@ Panel {
       root.tripError = ""
       keyCatcher.forceActiveFocus()
     }
-    Hafas.fetchTrips(query.from, query.to, when, function(err, list) {
+    Hafas.fetchTrips(root.post, query.from, query.to, when, function(err, list) {
       if (id !== root.tripRequestId) return
-      tripTimeout.stop()
       root.tripLoading = false
       // A failed background refresh keeps the old results on screen.
       if (err && mode === "refresh") return
@@ -294,15 +289,6 @@ Panel {
     })
   }
 
-  Timer {
-    id: tripTimeout
-    interval: 8000
-    onTriggered: {
-      root.tripRequestId++
-      root.tripLoading = false
-      root.tripError = "Request timed out"
-    }
-  }
 
   // Keep the shown connections current while the tab is open (skipped once
   // later pages are loaded, so the list doesn't jump around).
@@ -549,6 +535,7 @@ Panel {
 
             StopSearch {
               id: stationSearch
+              post: root.post
               visible: root.editingStation
               width: parent.width
               placeholderText: "Search stop"
@@ -690,6 +677,7 @@ Panel {
 
                 StopSearch {
                   id: fromSearch
+                  post: root.post
                   width: parent.width
                   stationsOnly: false
                   placeholderText: "From"
@@ -702,6 +690,7 @@ Panel {
 
                 StopSearch {
                   id: toSearch
+                  post: root.post
                   width: parent.width
                   stationsOnly: false
                   placeholderText: "To"

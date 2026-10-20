@@ -60,7 +60,7 @@ The stop, the favorites and the per-stop lines picked in the popup are saved in 
 
 - Departures are fetched every `refreshIntervalSec` (60 s by default). The rate goes up to every 20 s while the popup is open or the next bus leaves within 5 minutes.
 - Opening the popup, switching stops and waking from sleep each trigger an immediate fetch.
-- A request that gets no answer within 8 s counts as failed. Failures are retried after 5 s, then 15 s, then 45 s, up to the normal interval. The last good data stays on screen, and the bar dims once it is more than 3 minutes old.
+- Each request runs as its own `curl` process with an 8 s limit, so a dead connection (e.g. after sleep) can't block refreshing. A failed request is retried after 5 s, then 15 s, then 45 s, up to the normal interval. The last good data stays on screen, and the bar dims once it is more than 3 minutes old.
 - Connection results re-run every minute while the Connections tab is open. This stops once you load later connections.
 
 ## Files
@@ -68,4 +68,5 @@ The stop, the favorites and the per-stop lines picked in the popup are saved in 
 - `Panel.qml`: the bar pill and the popup
 - `StopSearch.qml`: stop input with live suggestions
 - `LineBadge.qml`: line badge (icon + number)
-- `Hafas.js`: API client and parsing
+- `Hafas.js`: API requests and parsing
+- `Request.qml`: runs one API request with curl

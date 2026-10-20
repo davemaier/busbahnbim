@@ -23,29 +23,26 @@ var ICONS = {
   other: "\u{F00E7}"
 }
 
-// POST one service request; cb(error, result).
-function request(meth, req, cb) {
+// Send one service request; cb(error, result).
+// `post(url, body, cb)` does the HTTP part and calls cb(error, responseText);
+// Panel.qml provides it (one curl process per request, see Request.qml).
+function request(post, meth, req, cb) {
   var body = JSON.parse(JSON.stringify(ENVELOPE))
   body.svcReqL = [{ meth: meth, req: req }]
 
-  var xhr = new XMLHttpRequest()
-  xhr.onreadystatechange = function() {
-    if (xhr.readyState !== XMLHttpRequest.DONE) return
-    if (xhr.status !== 200) { cb(xhr.status ? "HTTP " + xhr.status : "No connection", null); return }
+  post(ENDPOINT, JSON.stringify(body), function(err, text) {
+    if (err) { cb(err, null); return }
     try {
-      var data = JSON.parse(xhr.responseText)
+      var data = JSON.parse(text)
       var svc = data.svcResL && data.svcResL[0]
       if (data.err && data.err !== "OK") cb(data.errTxt || data.err, null)
       else if (!svc) cb("Empty response", null)
       else if (svc.err !== "OK") cb(svc.errTxt || svc.err, null)
       else cb(null, svc.res)
     } catch (e) {
-      cb(String(e), null)
+      cb("Unreadable response", null)
     }
-  }
-  xhr.open("POST", ENDPOINT)
-  xhr.setRequestHeader("Content-Type", "application/json")
-  xhr.send(JSON.stringify(body))
+  })
 }
 
 // A stop is { name, extId, lid }. The station board only needs the extId.
@@ -53,8 +50,8 @@ function stopLid(stop) {
   return stop.lid || ("A=1@L=" + stop.extId + "@")
 }
 
-function searchStops(query, stationsOnly, cb) {
-  request("LocMatch", {
+function searchStops(post, query, stationsOnly, cb) {
+  request(post, "LocMatch", {
     input: { field: "S", loc: { type: stationsOnly ? "S" : "ALL", name: query + "?" }, maxLoc: 8 }
   }, function(err, res) {
     if (err) { cb(err, []); return }
@@ -65,14 +62,14 @@ function searchStops(query, stationsOnly, cb) {
   })
 }
 
-function fetchDepartures(stop, count, cb) {
-  request("StationBoard", { type: "DEP", stbLoc: { lid: stopLid(stop) }, maxJny: count }, function(err, res) {
+function fetchDepartures(post, stop, count, cb) {
+  request(post, "StationBoard", { type: "DEP", stbLoc: { lid: stopLid(stop) }, maxJny: count }, function(err, res) {
     cb(err, err ? [] : parseDepartures(res))
   })
 }
 
-function fetchTrips(from, to, when, cb) {
-  request("TripSearch", {
+function fetchTrips(post, from, to, when, cb) {
+  request(post, "TripSearch", {
     depLocL: [{ lid: stopLid(from) }],
     arrLocL: [{ lid: stopLid(to) }],
     outDate: ymd(when),

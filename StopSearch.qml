@@ -13,6 +13,7 @@ Column {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property bool stationsOnly: true
+  property var post: null   // HTTP function from Panel.qml
   // Stops starting with this (e.g. "Graz") are listed first.
   property string preferPrefix: ""
   property var stop: null
@@ -49,7 +50,7 @@ Column {
     if (query.length < 2) { root.suggestions = []; return }
     var id = ++root.requestId
     root.loading = true
-    Hafas.searchStops(query, root.stationsOnly, function(err, stops) {
+    Hafas.searchStops(root.post, query, root.stationsOnly, function(err, stops) {
       if (id !== root.requestId) return
       root.loading = false
       if (root.preferPrefix) {
